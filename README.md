@@ -1,6 +1,6 @@
 # maimai DX 判定分布反推
 
-输入谱面物量和目标达成率, 反推出一组能**恰好达到**该达成率的判定分布 (每种音符各有多少 Critical Perfect / Perfect / Great / Good / Miss).
+输入谱面物量和目标达成率, 反推出一组**刚好达到**该达成率 (不低于目标的最低达成率) 的判定分布 (每种音符各有多少 Critical Perfect / Perfect / Great / Good / Miss).
 
 在线使用: https://mscmonster.github.io/maimai-score-solver/
 
