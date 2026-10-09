@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>maimai 判定分布反推</title>
+    <style>
+        :root {
+            --bg: #0f1020;
+            --panel: #181a33;
+            --panel-2: #20234a;
+            --line: #2d3166;
+            --text: #e8e9ff;
+            --muted: #9096c8;
+            --accent: #ff5fa2;
+            --accent-2: #4fd1ff;
+            --ok: #4be3a0;
+            --warn: #ffc857;
+            --cp: #ffd75e;
+            --p: #ffb347;
+            --great: #ff7ac6;
+            --good: #5fc8ff;
+            --miss: #8a8fb8;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(1200px 600px at 10% -10%, #2a1846 0%, transparent 60%),
+                radial-gradient(900px 500px at 110% 10%, #10304a 0%, transparent 60%), var(--bg);
+            color: var(--text);
+            font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 18px 60px; }
+
+        header h1 { margin: 0; font-size: 24px; letter-spacing: .5px; }
+        header h1 span {
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        header p { margin: 4px 0 22px; color: var(--muted); }
+
+        .grid { display: grid; grid-template-columns: 380px 1fr; gap: 18px; align-items: start; }
+        @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+
+        .card {
+            background: linear-gradient(180deg, var(--panel) 0%, #15172e 100%);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+        }
+        .card + .card { margin-top: 18px; }
+        .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); font-weight: 600; }
+
+        label.field { display: block; margin-bottom: 12px; }
+        label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+
+        input, select {
+            width: 100%;
+            background: var(--panel-2);
+            border: 1px solid var(--line);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font: inherit;
+            outline: none;
+            transition: border-color .15s;
+        }
+        input:focus, select:focus { border-color: var(--accent-2); }
+        input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+
+        .search { position: relative; }
+        .suggest {
+            position: absolute; z-index: 10; left: 0; right: 0; top: calc(100% + 4px);
+            background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+            max-height: 280px; overflow-y: auto; display: none;
+        }
+        .suggest.show { display: block; }
+        .suggest div { padding: 7px 10px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+        .suggest div:hover, .suggest div.active { background: var(--line); }
+        .suggest .sid { color: var(--muted); font-size: 12px; min-width: 46px; }
+        .tag { font-size: 11px; padding: 0 6px; border-radius: 4px; font-weight: 700; }
+        .tag.DX { background: #ff9d2e33; color: #ffb35c; }
+        .tag.SD { background: #4fd1ff26; color: var(--accent-2); }
+
+        .diffs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
+        .diffs button { flex: 1; min-width: 56px; }
+        .song-info { font-size: 12px; color: var(--muted); min-height: 18px; }
+        .song-info b { color: var(--text); }
+
+        .counts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+        .counts label { font-size: 11px; color: var(--muted); text-align: center; display: block; }
+        .counts input { text-align: center; padding: 7px 4px; }
+        .total { margin-top: 6px; font-size: 12px; color: var(--muted); text-align: right; }
+
+        button {
+            background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+            border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer;
+            transition: all .15s;
+        }
+        button:hover { border-color: var(--accent-2); }
+        button.on { background: linear-gradient(90deg, var(--accent), #c45cff); border-color: transparent; color: #fff; }
+        .diff-0.on { background: #3bc46a; } .diff-1.on { background: #e7b416; }
+        .diff-2.on { background: #e5465b; } .diff-3.on { background: #9a4de0; }
+        .diff-4.on { background: #d8b4ff; color: #3a1960; }
+
+        .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+        .quick button { padding: 3px 8px; }
+
+        .result-head { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+        .ach { font-size: 46px; font-weight: 800; letter-spacing: 1px; line-height: 1; font-variant-numeric: tabular-nums; }
+        .ach small { font-size: 22px; font-weight: 700; color: var(--muted); }
+        .rank {
+            font-size: 26px; font-weight: 900; font-style: italic;
+            background: linear-gradient(180deg, #fff6b0, #ffb300);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        .badges { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+        .badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+        .badge.ok { color: var(--ok); border-color: #4be3a055; }
+        .badge.warn { color: var(--warn); border-color: #ffc85755; }
+
+        .dx { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .dx .stars { color: #ffd75e; letter-spacing: 2px; font-size: 16px; }
+        .bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; flex: 1; max-width: 260px; }
+        .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--ok)); }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-variant-numeric: tabular-nums; }
+        th, td { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--line); }
+        th { font-size: 12px; font-weight: 600; }
+        td:first-child, th:first-child { text-align: left; font-weight: 700; }
+        td.zero { color: #4a4f80; }
+        th.cp { color: var(--cp); } th.p { color: var(--p); } th.great { color: var(--great); }
+        th.good { color: var(--good); } th.miss { color: var(--miss); }
+        tr.sum td { font-weight: 700; border-bottom: none; }
+        .break-detail { font-size: 12px; color: var(--muted); margin-top: 10px; }
+        .break-detail b { color: var(--text); font-weight: 600; }
+
+        .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+        .foot { font-size: 12px; color: var(--muted); margin-top: 14px; }
+        .err { color: #ff7a7a; }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <header>
+            <h1><span>maimai DX</span> 判定分布反推</h1>
+            <p>给定谱面物量和目标达成率, 求出能达到该达成率的判定分布 (≥ 目标的最低可达值, 结果精确).</p>
+        </header>
+
+        <div class="grid">
+            <div>
+                <div class="card">
+                    <h2>谱面</h2>
+                    <label class="field search">
+                        <span>搜索曲目 (曲名 / ID, 数据来自水鱼查分器)</span>
+                        <input id="songSearch" placeholder="正在加载曲库..." autocomplete="off" disabled>
+                        <div class="suggest" id="suggest"></div>
+                    </label>
+                    <div class="song-info" id="songInfo"></div>
+                    <div class="diffs" id="diffs"></div>
+
+                    <div class="counts" style="margin-top:12px">
+                        <div><label>TAP</label><input type="number" min="0" id="c-tap" value="666"></div>
+                        <div><label>HOLD</label><input type="number" min="0" id="c-hold" value="36"></div>
+                        <div><label>SLIDE</label><input type="number" min="0" id="c-slide" value="104"></div>
+                        <div><label>TOUCH</label><input type="number" min="0" id="c-touch" value="59"></div>
+                        <div><label>BREAK</label><input type="number" min="0" id="c-break" value="101"></div>
+                    </div>
+                    <div class="total" id="total"></div>
+                </div>
+
+                <div class="card">
+                    <h2>目标</h2>
+                    <label class="field">
+                        <span>目标达成率 (%)</span>
+                        <input id="target" value="100.5000" inputmode="decimal">
+                        <div class="quick" id="quick"></div>
+                    </label>
+                    <label class="field">
+                        <span>判定约束</span>
+                        <div class="seg" id="constraint"></div>
+                    </label>
+                    <label class="field" style="margin-bottom:0">
+                        <span>目标 DX 分 (可选, 留空则普通音符完美档全部取 Critical Perfect)</span>
+                        <input type="number" min="0" id="targetDx" placeholder="留空">
+                    </label>
+                </div>
+            </div>
+
+            <div class="card" id="result">
+                <div class="empty">输入物量后自动计算</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./solver.js"></script>
+    <script>
+        (() => {
+            const { NOTE_TYPES, NOTE_LABELS, JUDGES, CONSTRAINTS, judgesOf, solve } = window.MaiSolver;
+            const $ = (id) => document.getElementById(id);
+            const el = (tag, props = {}, children = []) => {
+                const e = Object.assign(document.createElement(tag), props);
+                for (const c of [].concat(children)) e.append(c);
+                return e;
+            };
+
+            const DIFF_NAMES = ['Basic', 'Advanced', 'Expert', 'Master', 'Re:Master'];
+            const RANKS = [[1005000, 'SSS+'], [1000000, 'SSS'], [995000, 'SS+'], [990000, 'SS'], [980000, 'S+'], [970000, 'S'],
+            [940000, 'AAA'], [900000, 'AA'], [800000, 'A'], [750000, 'BBB'], [700000, 'BB'], [600000, 'B'], [500000, 'C'], [0, 'D']];
+            const rankOf = (a) => RANKS.find(([t]) => a >= t)[1];
+            const starsOf = (dx, max) => [0.85, 0.90, 0.93, 0.95, 0.97].filter((t) => max && dx / max >= t).length;
+            const fmtAch = (v) => `${Math.floor(v / 10000)}.${String(v % 10000).padStart(4, '0')}`;
+
+            /** "100.5" -> 1005000, 用字符串处理避免浮点误差 */
+            function parseAch(str) {
+                const m = String(str).trim().replace(/%$/, '').match(/^(\d{1,3})(?:\.(\d{0,4})\d*)?$/);
+                if (!m) return null;
+                return Number(m[1]) * 10000 + Number((m[2] || '').padEnd(4, '0'));
+            }
+
+            // ---- 状态 ----
+            let constraint = 'none';
+
+            // ---- 约束 / 快捷目标 ----
+            for (const [key, c] of Object.entries(CONSTRAINTS)) {
+                const b = el('button', { textContent: c.label, className: key === constraint ? 'on' : '' });
+                b.dataset.key = key;
+                b.onclick = () => {
+                    constraint = key;
+                    for (const x of $('constraint').children) x.classList.toggle('on', x.dataset.key === key);
+                    run();
+                };
+                $('constraint').append(b);
+            }
+            for (const v of ['101.0000', '100.5000', '100.0000', '99.5000', '99.0000', '98.0000', '97.0000']) {
+                $('quick').append(el('button', { textContent: v, onclick: () => { $('target').value = v; run(); } }));
+            }
+
+            // ---- 计算与渲染 ----
+            let timer = null;
+            const schedule = () => { clearTimeout(timer); timer = setTimeout(run, 120); };
+            for (const t of NOTE_TYPES) $(`c-${t}`).addEventListener('input', schedule);
+            $('target').addEventListener('input', schedule);
+            $('targetDx').addEventListener('input', schedule);
+
+            function readCounts() {
+                const counts = {};
+                for (const t of NOTE_TYPES) counts[t] = Math.max(0, parseInt($(`c-${t}`).value, 10) || 0);
+                return counts;
+            }
+
+            function run() {
+                const counts = readCounts();
+                const total = NOTE_TYPES.reduce((s, t) => s + counts[t], 0);
+                $('total').textContent = `总物量 ${total}`;
+                const box = $('result');
+                box.replaceChildren();
+                const target = parseAch($('target').value);
+                if (target == null) return box.append(el('div', { className: 'empty err', textContent: '达成率格式不对, 例: 100.5 或 100.5000' }));
+                if (total === 0) return box.append(el('div', { className: 'empty', textContent: '输入物量后自动计算' }));
+
+                let r;
+                try {
+                    r = solve({ counts, target, constraint, targetDx: $('targetDx').value });
+                } catch (e) {
+                    return box.append(el('div', { className: 'empty err', textContent: `计算出错: ${e.message}` }));
+                }
+                if (!r.ok) return box.append(el('div', { className: 'empty err', textContent: r.message }));
+                render(box, r, counts);
+            }
+
+            function render(box, r, counts) {
+                const [ip, fp] = fmtAch(r.achievement).split('.');
+                box.append(el('h2', { textContent: '结果' }));
+                box.append(el('div', { className: 'result-head' }, [
+                    el('div', { className: 'ach' }, [ip + '.', el('small', { textContent: fp + '%' })]),
+                    el('div', { className: 'rank', textContent: rankOf(r.achievement) }),
+                ]));
+
+                const badges = el('div', { className: 'badges' });
+                if (r.exact) badges.append(el('span', { className: 'badge ok', textContent: '✔ 精确命中目标' }));
+                else if (r.target > r.maxAchievement) badges.append(el('span', { className: 'badge warn', textContent: `目标超过理论值 ${fmtAch(r.maxAchievement)}%` }));
+                else badges.append(el('span', { className: 'badge warn', textContent: `无法精确达到 ${fmtAch(r.target)}%, 已取最近的更高值` }));
+                badges.append(el('span', { className: 'badge', textContent: CONSTRAINTS[r.constraint].label }));
+                badges.append(el('span', { className: 'badge', textContent: `${r.elapsed} ms` }));
+                box.append(badges);
+
+                const stars = starsOf(r.dx, r.dxMax);
+                box.append(el('div', { className: 'dx' }, [
+                    el('span', { textContent: `DX ${r.dx} / ${r.dxMax}` }),
+                    el('div', { className: 'bar' }, el('i', { style: `width:${(r.dx / r.dxMax * 100).toFixed(2)}%` })),
+                    el('span', { className: 'stars', textContent: '★'.repeat(stars) + '☆'.repeat(5 - stars) }),
+                ]));
+
+                // 表格: 按 CP/P/Great/Good/Miss 汇总, break 细分另起一行
+                const cols = [['cp', 'Critical'], ['p', 'Perfect'], ['great', 'Great'], ['good', 'Good'], ['miss', 'Miss']];
+                const group = (t, d) => t === 'break'
+                    ? { cp: d.cp, p: d.p1 + d.p2, great: d.g1 + d.g2 + d.g3, good: d.good, miss: d.miss }
+                    : d;
+                const table = el('table');
+                table.append(el('tr', {}, [el('th', { textContent: '' }), ...cols.map(([k, n]) => el('th', { className: k, textContent: n })), el('th', { textContent: '合计' })]));
+                const sums = { cp: 0, p: 0, great: 0, good: 0, miss: 0 };
+                for (const t of NOTE_TYPES) {
+                    if (!r.distribution[t]) continue;
+                    const g = group(t, r.distribution[t]);
+                    table.append(el('tr', {}, [
+                        el('td', { textContent: NOTE_LABELS[t] }),
+                        ...cols.map(([k]) => { sums[k] += g[k]; return el('td', { className: g[k] ? '' : 'zero', textContent: g[k] }); }),
+                        el('td', { textContent: counts[t] }),
+                    ]));
+                }
+                table.append(el('tr', { className: 'sum' }, [
+                    el('td', { textContent: '合计' }),
+                    ...cols.map(([k]) => el('td', { textContent: sums[k] })),
+                    el('td', { textContent: r.totalNotes }),
+                ]));
+                box.append(table);
+
+                const b = r.distribution.break;
+                if (b) {
+                    const parts = JUDGES.break.filter((j) => b[j.key]).map((j) => [el('b', { textContent: j.label }), ` × ${b[j.key]}　`]).flat();
+                    box.append(el('div', { className: 'break-detail' }, ['BREAK 细分: ', ...parts]));
+                }
+                box.append(el('div', { className: 'foot', textContent: '同一达成率下优先 Great, 其次 Good / Miss; BREAK 优先 Perfect 档. 普通音符的 Critical Perfect 与 Perfect 不影响达成率, 只影响 DX 分.' }));
+            }
+
+            // ---- 曲库 ----
+            let songs = [];
+            let current = null;
+            const search = $('songSearch');
+            const suggest = $('suggest');
+            let active = -1;
+
+            fetch('https://www.diving-fish.com/api/maimaidxprober/music_data')
+                .then((r) => r.json())
+                .then((data) => {
+                    songs = data;
+                    search.disabled = false;
+                    search.placeholder = `搜索 ${songs.length} 首曲目...`;
+                })
+                .catch(() => { search.placeholder = '曲库加载失败, 请手动输入物量'; });
+
+            function showSuggest() {
+                const q = search.value.trim().toLowerCase();
+                suggest.replaceChildren();
+                active = -1;
+                if (!q) return suggest.classList.remove('show');
+                const hits = songs.filter((s) => s.id === q || s.title.toLowerCase().includes(q)).slice(0, 30);
+                for (const s of hits) {
+                    const item = el('div', {}, [
+                        el('span', { className: 'sid', textContent: s.id }),
+                        el('span', { className: `tag ${s.type}`, textContent: s.type }),
+                        el('span', { textContent: s.title }),
+                    ]);
+                    item.onmousedown = (e) => { e.preventDefault(); pick(s); };
+                    suggest.append(item);
+                }
+                suggest.classList.toggle('show', hits.length > 0);
+            }
+            search.addEventListener('input', showSuggest);
+            search.addEventListener('blur', () => suggest.classList.remove('show'));
+            search.addEventListener('keydown', (e) => {
+                const items = [...suggest.children];
+                if (!items.length) return;
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                    items.forEach((x, i) => x.classList.toggle('active', i === active));
+                    items[active].scrollIntoView({ block: 'nearest' });
+                } else if (e.key === 'Enter') {
+                    items[Math.max(active, 0)].dispatchEvent(new MouseEvent('mousedown'));
+                }
+            });
+
+            function pick(song) {
+                current = song;
+                search.value = song.title;
+                suggest.classList.remove('show');
+                $('songInfo').replaceChildren(el('b', { textContent: song.title }), ` · ${song.basic_info?.artist || ''} · ${song.type}`);
+                const diffs = $('diffs');
+                diffs.replaceChildren();
+                song.charts.forEach((c, i) => {
+                    const b = el('button', { className: `diff-${i}`, textContent: `${DIFF_NAMES[i]} ${song.level[i]}` });
+                    b.onclick = () => selectDiff(i);
+                    diffs.append(b);
+                });
+                selectDiff(Math.min(3, song.charts.length - 1));
+            }
+
+            function selectDiff(i) {
+                [...$('diffs').children].forEach((b, k) => b.classList.toggle('on', k === i));
+                const n = current.charts[i].notes;
+                // 水鱼格式: SD 谱 [tap, hold, slide, break], DX 谱 [tap, hold, slide, touch, break]
+                const [tap, hold, slide, touch, brk] = n.length === 4 ? [n[0], n[1], n[2], 0, n[3]] : n;
+                Object.entries({ tap, hold, slide, touch, break: brk }).forEach(([t, v]) => { $(`c-${t}`).value = v; });
+                run();
+            }
+
+            run();
+        })();
+    </script>
+</body>
+
+</html>
