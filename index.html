@@ -341,14 +341,47 @@
             const suggest = $('suggest');
             let active = -1;
 
-            fetch('https://www.diving-fish.com/api/maimaidxprober/music_data')
-                .then((r) => r.json())
-                .then((data) => {
-                    songs = data;
-                    search.disabled = false;
-                    search.placeholder = `搜索 ${songs.length} 首曲目...`;
-                })
-                .catch(() => { search.placeholder = '曲库加载失败, 请手动输入物量'; });
+            // 曲库缓存到 localStorage, 只保留页面用到的字段, TTL 1 天; 拉取失败时退回过期缓存
+            const MUSIC_CACHE_KEY = 'mai-music-data-v1';
+            const MUSIC_CACHE_TTL = 24 * 3600 * 1000;
+
+            function readMusicCache() {
+                try { return JSON.parse(localStorage.getItem(MUSIC_CACHE_KEY)); } catch { return null; }
+            }
+
+            function slimSongs(data) {
+                return data.map((s) => ({
+                    id: s.id,
+                    title: s.title,
+                    type: s.type,
+                    level: s.level,
+                    basic_info: { artist: s.basic_info?.artist },
+                    charts: s.charts.map((c) => ({ notes: c.notes })),
+                }));
+            }
+
+            function loadSongs(data) {
+                songs = data;
+                search.disabled = false;
+                search.placeholder = `搜索 ${songs.length} 首曲目...`;
+            }
+
+            const musicCache = readMusicCache();
+            if (musicCache && Date.now() - musicCache.time < MUSIC_CACHE_TTL) {
+                loadSongs(musicCache.data);
+            } else {
+                fetch('https://www.diving-fish.com/api/maimaidxprober/music_data')
+                    .then((r) => r.json())
+                    .then((data) => {
+                        const slim = slimSongs(data);
+                        loadSongs(slim);
+                        try { localStorage.setItem(MUSIC_CACHE_KEY, JSON.stringify({ time: Date.now(), data: slim })); } catch { }
+                    })
+                    .catch(() => {
+                        if (musicCache) loadSongs(musicCache.data);
+                        else search.placeholder = '曲库加载失败, 请手动输入物量';
+                    });
+            }
 
             function showSuggest() {
                 const q = search.value.trim().toLowerCase();

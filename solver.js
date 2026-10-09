@@ -1,7 +1,7 @@
 /**
  * maimai DX 判定分布反推求解器 (纯 JS, 精确解)
  *
- * 思路来自线上 mai/score.py (原为 PuLP 整数规划), 这里改成专用的整数 DP:
+ * 使用专用的整数 DP 求精确解:
  *
  * 以"全 Critical Perfect"为满分, 每个判定只会造成两种整数损失:
  *   M: 基础分损失, 单位 = 50 分 x 倍率. 普通音符 great/good/miss = 2r/5r/10r, break = 10/20/25/30/50
