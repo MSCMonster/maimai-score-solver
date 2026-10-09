@@ -44,7 +44,7 @@
             background-clip: text;
             color: transparent;
         }
-        header p { margin: 4px 0 22px; color: var(--muted); }
+        header { margin-bottom: 22px; }
 
         .grid { display: grid; grid-template-columns: 380px 1fr; gap: 18px; align-items: start; }
         @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
@@ -145,16 +145,45 @@
         .break-detail b { color: var(--text); font-weight: 600; }
 
         .empty { color: var(--muted); padding: 40px 0; text-align: center; }
-        .foot { font-size: 12px; color: var(--muted); margin-top: 14px; }
         .err { color: #ff7a7a; }
+
+        /* 说明图标: 桌面端 hover, 触屏点击切换. 浮层相对 .has-info 定位, 宽度不超过所在字段 */
+        .has-info { position: relative; }
+        .info {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 16px; height: 16px; margin-left: 6px; vertical-align: middle;
+            border: 1px solid var(--muted); border-radius: 50%;
+            font: italic 700 11px/1 Georgia, serif; color: var(--muted);
+            cursor: pointer; user-select: none; outline: none;
+            -webkit-text-fill-color: currentColor;
+        }
+        h1 .info { width: 18px; height: 18px; font-size: 12px; }
+        .info:hover, .info.open, .info:focus-visible { color: var(--accent-2); border-color: var(--accent-2); }
+        .tip {
+            display: none; position: absolute; z-index: 20; left: 0; top: calc(100% + 6px);
+            width: max-content; max-width: min(420px, 100%);
+            background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .4);
+            font: 12px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            letter-spacing: 0; color: var(--text); text-transform: none;
+            -webkit-text-fill-color: currentColor;
+        }
+        .tip p { margin: 0; }
+        .tip p + p { margin-top: 6px; }
+        .has-info:has(.info.open) > .tip, .has-info:has(.info:focus-visible) > .tip { display: block; }
+        @media (hover: hover) { .has-info:has(.info:hover) > .tip { display: block; } }
     </style>
 </head>
 
 <body>
     <div class="wrap">
         <header>
-            <h1><span>maimai DX</span> 判定分布反推</h1>
-            <p>给定谱面物量和目标达成率, 求出能达到该达成率的判定分布 (≥ 目标的最低可达值, 结果精确).</p>
+            <h1 class="has-info"><span>maimai DX</span> 判定分布反推<i class="info" tabindex="0">i</i>
+                <div class="tip">
+                    <p>给定谱面物量和目标达成率, 求出能达到该达成率的判定分布 (≥ 目标的最低可达值, 结果精确).</p>
+                    <p>同一达成率下优先 Great, 其次 Good / Miss; BREAK 优先 Perfect 档. 普通音符的 Critical Perfect 与 Perfect 不影响达成率, 只影响 DX 分.</p>
+                </div>
+            </h1>
         </header>
 
         <div class="grid">
@@ -162,7 +191,7 @@
                 <div class="card">
                     <h2>谱面</h2>
                     <label class="field search">
-                        <span>搜索曲目 (曲名 / ID, 数据来自水鱼查分器)</span>
+                        <span class="has-info">搜索曲目<i class="info" tabindex="0">i</i><span class="tip">支持曲名 / ID 搜索, 曲库数据来自水鱼查分器, 本地缓存 1 天</span></span>
                         <input id="songSearch" placeholder="正在加载曲库..." autocomplete="off" disabled>
                         <div class="suggest" id="suggest"></div>
                     </label>
@@ -191,7 +220,7 @@
                         <div class="seg" id="constraint"></div>
                     </label>
                     <label class="field" style="margin-bottom:0">
-                        <span>目标 DX 分 (可选, 留空则普通音符完美档全部取 Critical Perfect)</span>
+                        <span class="has-info">目标 DX 分 (可选)<i class="info" tabindex="0">i</i><span class="tip">留空则普通音符完美档全部取 Critical Perfect</span></span>
                         <input type="number" min="0" id="targetDx" placeholder="留空">
                     </label>
                 </div>
@@ -208,6 +237,12 @@
         (() => {
             const { NOTE_TYPES, NOTE_LABELS, JUDGES, CONSTRAINTS, judgesOf, solve } = window.MaiSolver;
             const $ = (id) => document.getElementById(id);
+            // 说明图标: 点击切换 (触屏), 点其他地方关闭; 阻止默认行为, 避免 label 把点击转给输入框
+            document.addEventListener('click', (e) => {
+                const icon = e.target.closest('.info');
+                for (const i of document.querySelectorAll('.info.open')) if (i !== icon) i.classList.remove('open');
+                if (icon) { e.preventDefault(); icon.classList.toggle('open'); }
+            });
             const el = (tag, props = {}, children = []) => {
                 const e = Object.assign(document.createElement(tag), props);
                 for (const c of [].concat(children)) e.append(c);
@@ -331,7 +366,6 @@
                     const parts = JUDGES.break.filter((j) => b[j.key]).map((j) => [el('b', { textContent: j.label }), ` × ${b[j.key]}　`]).flat();
                     box.append(el('div', { className: 'break-detail' }, ['BREAK 细分: ', ...parts]));
                 }
-                box.append(el('div', { className: 'foot', textContent: '同一达成率下优先 Great, 其次 Good / Miss; BREAK 优先 Perfect 档. 普通音符的 Critical Perfect 与 Perfect 不影响达成率, 只影响 DX 分.' }));
             }
 
             // ---- 曲库 ----
